@@ -1,0 +1,42 @@
+name: Deploy CSD Editor to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]      # Change this if your default branch is different
+  workflow_dispatch:         # Allow manual runs from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # No build step needed because your repo already contains
+      # the compiled static files under the `csd-editor/` folder.
+      # We just upload that folder as the Pages artifact.
+
+      - name: Upload static site as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./csd-editor   # This matches the folder in your zip
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
