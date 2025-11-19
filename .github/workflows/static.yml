@@ -2,9 +2,10 @@ name: Deploy CSD Editor to GitHub Pages
 
 on:
   push:
-    branches: [ main ]   # or 'master' if that's your default branch
+    branches: [ main ]  # adjust if your default branch is different
   workflow_dispatch:
 
+# Permissions for GitHub Pages
 permissions:
   contents: read
   pages: write
@@ -15,27 +16,58 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # No build step needed: index.html and all assets are already in the repo root
-
-      - name: Upload static site as Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # Root of the repo, where index.html lives
-          path: .
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
+      # 1. Checkout the repo
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Setup GitHub Pages (recommended action)
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # 3. Fix <base href> so assets load correctly under /csd_on_wiki/
+      - name: Adjust base href for GitHub Pages
+        run: |
+          REPO_NAME="csd_on_wiki"
+
+          if [ -f index.html ]; then
+            echo "Patching <base href> in index.html for /${REPO_NAME}/"
+
+            # If there's already a <base href="/"> or <base href="./">
+            if grep -q '<base href="' index.html; then
+              # Common Angular cases
+              sed -i "s|<base href=\"/\"|<base href=\"/${REPO_NAME}/\"|g" index.html || true
+              sed -i "s|<base href=\"./\"|<base href=\"/${REPO_NAME}/\"|g" index.html || true
+            else
+              # No base tag? Inject one.
+              sed -i "s|<head>|<head>\n  <base href=\"/${REPO_NAME}/\">|" index.html
+            fi
+          else
+            echo "ERROR: index.html not found in repo root"
+            exit 1
+          fi
+
+      # 4. Make sure Jekyll doesn't interfere (good practice for SPA builds)
+      - name: Disable Jekyll
+        run: touch .nojekyll
+
+      # 5. SPA-friendly 404 fallback (routes still work on hard refresh)
+      - name: Create SPA 404 fallback
+        run: cp index.html 404.html
+
+      # 6. Upload static site as Pages artifact (root contains index.html + assets)
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .  # root: index.html, main.js, assets/, etc.
+
+      # 7. Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
